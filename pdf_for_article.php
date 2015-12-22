@@ -96,7 +96,8 @@ foreach ($ids as $biostor)
 			system($command);
 
 			// XMP?
-			if (1)
+			// Mendeley doesn't seem to recognise XMP
+			if (0)
 			{
 				pdf_add_xmp ($reference, $article_pdf_filename);
 			}
