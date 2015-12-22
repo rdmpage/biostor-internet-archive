@@ -1,0 +1,239 @@
+Internet Archive's S3 like server API
+
+
+This document is intended for a user who is comfortable in the
+unix command line environment. It covers the technical details
+of using the archive's S3 like server API.
+
+This document last updated: $Date$
+
+For info on S3:
+http://docs.amazonwebservices.com/AmazonS3/latest/dev/
+
+For info on IA's item structure:
+http://archive.org/about/faqs.php
+(sorry!)
+You can also look at an item's structure directly by clicking the HTTP link shown
+on a details page. ex: http://archive.org/details/stats
+
+HINT: If your curl has problems try curl or libcurl version 7.19 or higher.
+  Available at: http://curl.haxx.se/
+
+To get api keys for the archive's S3-Like API go to:
+  http://archive.org/account/s3.php
+
+
+What the S3 API does:
+
+o Items (things with details pages) get mapped to S3 Buckets.
+  - ie: http://archive.org/details/stats is also available as:
+        http://s3.us.archive.org/stats
+        or, per s3 dns bucket style:
+        http://stats.s3.us.archive.org/
+
+  - Files within items are also available as S3 keys, ex:
+    http://stats.s3.us.archive.org/downloadsPerDay.png
+
+o Doing a PUT on the S3 endpoint will result in a new internet archive Item
+
+o Files may also be uploaded to an Item in the same way keys are added, via S3 PUT.
+  - When a file is added to an Item, it is staged in temporary storage and ingested
+    via the Archive's content management system. This can take some time.
+
+o We support multipart uploads.
+
+We strive to make the S3 API compatible enough with current client code.
+Hopefully you can just global search and replace amazonaws.com with us.archive.org.
+
+The S3 API works well with the boto python library (multipart too!),
+use is_secure=False, host='s3.us.archive.org' and 
+calling_format=OrdinaryCallingFormat() when creating your boto connection.
+
+For example:
+import boto
+from boto.s3.connection import OrdinaryCallingFormat
+conn = boto.connect_s3(key, secret, host='s3.us.archive.org', 
+    is_secure=False, calling_format=OrdinaryCallingFormat())
+
+For other libraries / tools:
+perl -pi -e  's/amazonaws.com/us.archive.org/g' *
+Hopefully would do the trick.
+
+For using the POST support these documents are very useful:
+http://aws.amazon.com/articles/1434
+http://docs.amazonwebservices.com/AmazonS3/latest/dev/HTTPPOSTForms.html
+http://docs.amazonwebservices.com/AmazonS3/2006-03-01/API/RESTObjectPOST.html?r=8499
+
+
+How this is different from normal S3:
+
+o DELETE bucket is not allowed.
+
+o Only the HTTP 1.1 REST interface is supported.
+
+o Archive is much more likely to issue 307 Location redirects than Amazon is.
+    - Which means clients with good 100-Continue support are very nice to have
+    - curl versions curl-7.19 and newer have excellent 100-continue support
+
+o ACLs are fake. permissions are: World readable, Item uploader writable.
+
+o HTTP 1.1 Range headers are ignored (also copy range headers for multipart).
+
+
+There are special features of the archive s3 connector to support
+activities with Internet Archive items.
+
+o There is a combined upload and make item feature, just set the header:
+  x-archive-auto-make-bucket:1
+
+o An http header can specify metadata the ends up in _meta.xml at make bucket time.
+  o add headers of form x-archive-meta-$meta_name:$meta_value
+    (or x-amz-meta-$meta_name:$meta_value)
+  o if you want multiple tags in _meta.xml you can put numbers in front:
+    x-amz-meta01-$meta_name:$meta_value_a
+    x-amz-meta02-$meta_name:$meta_value_b
+  o meta headers are sorted prior to tag generation when placed in the xml
+  o meta headers are interpreted as having utf-8 character encoding
+  o because rfc822 http headers disallow _ in names, in $meta_name
+    two hyphens in a row (--) will be translated to an underscore(_).
+  o some http clients do not allow the full range of utf-8 bytes to appear
+    in http headers. As a work around, one can encode a utf-8
+    meta header with uri encoding. To do this write all the header data
+    like so: uri($payload_as_uri_encoded_utf8)
+    For example, to set the title of an item to include the unicode snowman:
+    x-archive-meta-title:uri(This%20is%20a%20snowman%20%E2%98%83)
+  o to update _meta.xml do a bucket PUT with the header
+    x-archive-ignore-preexisting-bucket:1
+    this will erase the old _meta.xml and replace it with
+    a new _meta.xml generated from the x-archive-meta-* headers in the PUT
+
+o There is a cleartext password mode; Authorization header
+  can be of form 'Authorization: LOW $accesskey:$secret'
+
+o Normally a PUT (aka file upload) to IA will cause the derive 
+  process to be queued for that bucket/item. You can prevent this
+  (heavyweight process) by specifying a header like so with each upload:
+  x-archive-queue-derive:0
+
+o DELETE normally deletes a single file, additionally all the
+  derivatives and originals related to a file can be
+  automatically deleted by specifying a header with the DELETE 
+  like so:
+  x-archive-cascade-delete:1
+
+o Normally PUT and DELETE do not keep old versions of files around.
+  To have the archive keep old versions of the object you can
+  add the header:
+  x-archive-keep-old-version:1
+  Saved versions will be placed in history/files/$key.~N~
+  (For multipart, the  x-archive-keep-old-version header must be
+  specified at the time the multipart upload is completed)
+
+o For large items a size hint can be given to the IA content 
+  management system at make bucket time (this helps if your 
+  item will be more than 10 gigabytes). Units are in bytes, for example:
+  x-archive-size-hint:19327352832
+  
+o For uploads which need to be available ASAP in the content
+  management system, an interactive user's upload for example,
+  one can request interactive queue priority:
+  x-archive-interactive-priority:1
+
+o To simulate errors s3 supports a special 'error this request' header.
+  For example, to simulate a Slowdown error that the s3 api may 
+  generate you can set an http header like so (in addition to any 
+  other headers you may normally send in a request):
+  x-archive-simulate-error:SlowDown
+  For example:
+  $ curl s3.us.archive.org -v -H x-archive-simulate-error:SlowDown
+  To see a list of errors s3 can simulate, you can do:
+  $ curl s3.us.archive.org -v -H x-archive-simulate-error:help
+
+o Sometimes the task queue system which processes PUTs and DELETEs
+  becomes overloaded, and the endpoint returns a 503 SlowDown error
+  instead of processing an upload or delete.
+  To check if an upload would fail because of overload you can call:
+    curl http://s3.us.archive.org/?check_limit=1&accesskey=$accesskey&bucket=$bucket
+  The result is a json object with 4 fields: bucket, accesskey,
+  over_limit, and detail. Detail contains internal information
+  about the current rate limiting scheme, it may change at any time.
+  The over_limit field will be either 0 to indicate that the queue is
+  ready for more uploads or deletes, or 1, indicating that uploads or
+  deletes are likely to get a 503 SlowDown error. The fields bucket
+  and accesskey are the query arguments passed in.
+
+EXAMPLES:
+
+o these features combined allow single command document upload with curl:
+
+Text item (a PDF will be OCR'd):
+    curl --location --header 'x-amz-auto-make-bucket:1' \
+         --header 'x-archive-meta01-collection:opensource' \
+         --header 'x-archive-meta-mediatype:texts' \
+         --header 'x-archive-meta-sponsor:Andrew W. Mellon Foundation' \
+         --header 'x-archive-meta-language:eng' \
+         --header "authorization: LOW $accesskey:$secret" \
+         --upload-file /home/samuel/public_html/intro-to-k.pdf \
+         http://s3.us.archive.org/sam-s3-test-08/demo-intro-to-k.pdf
+
+
+Movie item (Will get video player on details page):
+    curl --location --header 'x-amz-auto-make-bucket:1' \
+         --header 'x-archive-meta01-collection:opensource_movies' \
+         --header 'x-archive-meta-mediatype:movies' \
+         --header 'x-archive-meta-title:Ben plays piano.' \
+         --header "authorization: LOW $accesskey:$secret" \
+         --upload-file ben-2009-05-09.avi \
+         http://s3.us.archive.org/ben-plays-piano/ben-plays-piano.avi
+
+o If you want to upload a file to an existing item:
+
+    curl --location \
+         --header "authorization: LOW $accesskey:$secret" \
+         --upload-file /home/samuel/public_html/intro-to-k.pdf \
+         http://s3.us.archive.org/sam-s3-test-08/demo-intro-to-k.pdf
+
+
+o Destroy and respecify the metadata for an item:
+    
+    curl --location \
+         --header 'x-archive-ignore-preexisting-bucket:1' \
+         --header 'x-archive-meta01-collection:opensource' \
+         --header 'x-archive-meta-mediatype:texts' \
+         --header 'x-archive-meta-title:Fancy new title' \
+         --header "authorization: LOW $accesskey:$secret" \
+         --request PUT --header 'content-length:0' \
+         http://s3.us.archive.org/sam-s3-test-08
+
+    A Movie example with subject keywords, and creative commons license:
+
+    curl --location --header 'x-archive-ignore-preexisting-bucket:1' \
+         --header "authorization: LOW $accesskey:$secret" \
+         --header 'x-archive-meta-mediatype:movies' \
+         --header 'x-archive-meta-collection:opensource_movies' \
+         --header 'x-archive-meta-title:electricsheep-flock-244' \
+         --header 'x-archive-meta-creator:Scott Draves and the Electric Sheep' \
+         --header 'x-archive-meta-description:Archive of flock 244 of the Electric Sheep, see <a href=http://electricsheep.org >http://electricsheep.org</a> and <a href=http://scottdraves.com > http://scottdraves.com</a>' \
+         --header 'x-archive-meta-date:2009' \
+         --header 'x-archive-meta-year:2009' \
+         --header 'x-archive-meta-subject:electricsheep;alife;art;draves;spotworks;evolution;algorithm' \
+         --header 'x-archive-meta-licenseurl:http://creativecommons.org/licenses/by-nc/3.0/us/' \
+         --request PUT --header 'content-length:0' \
+         http://s3.us.archive.org/electricsheep-flock-244
+
+
+o Although the s3 interface supports GET and HEAD, high performance
+  downloads are achieved via the archive web infrastructure:
+
+    curl --location http://archive.org/download/sam-s3-test-08/demo-intro-to-k.pdf
+
+o After an object had been PUT into a bucket, many things happen
+  in the archive's petabox content management system (called the catalog).
+  You can see the catalog page for a bucket by looking at:
+  http://catalogd.archive.org/catalog.php?history=1&identifier=$bucket
+
+
+QUESTIONS?
+
+Mail info@archive.org, with the string s3help
+appearing somewhere in the subject line.
