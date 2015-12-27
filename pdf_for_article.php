@@ -10,7 +10,7 @@ require_once (dirname(__FILE__) . '/xmp.php');
 $tmpdir = dirname(__FILE__) . '/tmp';
 
 // BioStor reference numbers
-$ids = array(160234);
+$ids = array(145798);
 
 
 foreach ($ids as $biostor)
@@ -115,6 +115,9 @@ foreach ($ids as $biostor)
 			$headers[] = '"x-archive-auto-make-bucket:1"';
 			$headers[] = '"x-archive-ignore-preexisting-bucket:1"';
 			$headers[] = '"x-archive-interactive-priority:1"';
+			
+			// collection
+			$headers[] = '"x-archive-meta01-collection:biostor"';
 
 			// metadata
 			$headers[] = '"x-archive-meta-sponsor:BioStor"';
