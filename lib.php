@@ -97,7 +97,62 @@ function json_format($json)
     return $new_json;
 }
 
+//--------------------------------------------------------------------------
+/**
+ * @brief HEAD
+ *
+ * Test URL exists 
+ *
+ * @param url URL of resource
+ *
+ * @result true if exists
+ */
+function head($url, $userAgent = '', $content_type = '')
+{
+	global $config;
+	
+	$result = false;
 
+	$ch = curl_init(); 
+	curl_setopt ($ch, CURLOPT_URL, $url); 
+	curl_setopt ($ch, CURLOPT_RETURNTRANSFER, true); 
+	curl_setopt ($ch, CURLOPT_FOLLOWLOCATION, true);
+	curl_setopt ($ch, CURLOPT_HEADER,		  true);   
+	
+	if ($userAgent != '')
+	{
+		curl_setopt($ch, CURLOPT_USERAGENT, $userAgent);
+	}	
+	
+	if ($config['proxy_name'] != '')
+	{
+		curl_setopt ($ch, CURLOPT_PROXY, $config['proxy_name'] . ':' . $config['proxy_port']);
+	}
+	
+	if ($content_type != '')
+	{
+		curl_setopt ($ch, CURLOPT_HTTPHEADER, array ("Accept: " . $content_type));
+    }
+    
+    //curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'HEAD');
+    curl_setopt($ch, CURLOPT_NOBODY, true);
+	
+	$curl_result = curl_exec ($ch); 
+	
+	if (curl_errno ($ch) != 0 )
+	{
+		echo "CURL error: ", curl_errno ($ch), " ", curl_error($ch);
+	}
+	else
+	{
+		$info = curl_getinfo($ch);
+		
+		$http_code = $info['http_code'];
+		
+		$result = ($http_code == 200);
+	}
+	return $result;
+}
 
 //--------------------------------------------------------------------------
 /**
