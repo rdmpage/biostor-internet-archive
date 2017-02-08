@@ -11,20 +11,25 @@ $tmpdir = dirname(__FILE__) . '/tmp';
 
 // BioStor reference numbers
 
-$ids=array(3248);
+$ids=array(205921); // has DOI
+$ids=array(206021);
 
-$start = 172504;
-$end   = 172504;
+//$ids=array(206586);
+
+$force = false;
+$force = true;
+
+$add_xmp = true;
 
 
-for ($biostor = $start; $biostor <= $end; $biostor++)
-//foreach ($ids as $biostor)
+//for ($biostor = $start; $biostor <= $end; $biostor++)
+foreach ($ids as $biostor)
 {
 	echo "$biostor...";
 	
 	// Have we done this already?	
 	$pdf_url = 'https://archive.org/download/biostor-' . $biostor . '/biostor-' . $biostor . '.pdf';
-	if (head($pdf_url))
+	if (head($pdf_url) && !$force)
 	{
 		echo " PDF exists (HEAD returns 200)\n";
 	}
@@ -48,8 +53,7 @@ for ($biostor = $start; $biostor <= $end; $biostor++)
 			// Do we have this article PDF already?
 		
 			$article_pdf_filename = dirname(__FILE__) . '/' . $biostor . '.pdf';
-			if (file_exists($article_pdf_filename))
-			//if (0)
+			if (file_exists($article_pdf_filename) && !$force)
 			{
 				echo "Have PDF $article_pdf_filename\n";
 			}
@@ -121,7 +125,7 @@ for ($biostor = $start; $biostor <= $end; $biostor++)
 
 				// XMP?
 				// Mendeley doesn't seem to recognise XMP
-				if (0)
+				if ($add_xmp)
 				{
 					pdf_add_xmp ($reference, $article_pdf_filename);
 				}
@@ -129,7 +133,7 @@ for ($biostor = $start; $biostor <= $end; $biostor++)
 			}
 		
 			// Have PDF, now do something with it...
-			if(1)
+			if (1)
 			{
 				$identifier = 'biostor-' . $biostor;
 		
