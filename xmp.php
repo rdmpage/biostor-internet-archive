@@ -14,6 +14,7 @@
 function pdf_add_xmp ($reference, $pdf_filename)
 {	
 	// URL
+	// print_r($reference);
 	
 	if (isset($reference->identifiers))
 	{
@@ -22,13 +23,18 @@ function pdf_add_xmp ($reference, $pdf_filename)
 			$command = "exiftool" .  " -XMP:URL=" . escapeshellarg('http://biostor.org/reference/' . $reference->identifiers->biostor) . " " . $pdf_filename;	
 			system($command);
 		}
-	}
-	
-	// Mendeley will overwrite XMP-derived metadata with CrossRef metadata if we include this
-	if (isset($reference->doi))
-	{
-		$command = "exiftool" .  " -XMP:DOI=" . escapeshellarg($reference->doi) . " " . $pdf_filename;
-		system($command);
+		
+		// Mendeley will overwrite XMP-derived metadata with CrossRef metadata if we include this
+		if (isset($reference->identifiers->doi))
+		{
+			$command = "exiftool" .  " -XMP:DOI=" . escapeshellarg($reference->identifiers->doi) . " " . $pdf_filename;
+			system($command);
+						
+			// Keywords
+			$command = "exiftool" .  " -keywords+=" . escapeshellarg("DOI " . $reference->identifiers->doi) . " " . $pdf_filename;
+			system($command);			
+		}		
+		
 	}
 	
 	// Title and authors
@@ -37,8 +43,12 @@ function pdf_add_xmp ($reference, $pdf_filename)
 	
 	foreach ($reference->authors as $a)
 	{
-		//$command = "exiftool" .  " -XMP:Creator+=" . escapeshellarg($a) . " " . $pdf_filename;
-		//system($command);
+		if (isset($a->forename) && isset($a->surname))
+		{
+			$name = $a->forename . ' ' . $a->surname;
+			$command = "exiftool" .  " -XMP:Creator+=" . escapeshellarg($name) . " " . $pdf_filename;
+			system($command);
+		}
 	}
 	
 	// Article
@@ -63,7 +73,7 @@ function pdf_add_xmp ($reference, $pdf_filename)
 			system($command);
 		}
 		
-		/*
+		
 		$command = "exiftool" .  " -XMP:StartingPage=" . escapeshellarg($reference->spage) . " " . $pdf_filename;
 		system($command);
 		if (isset($reference->epage))
@@ -73,7 +83,6 @@ function pdf_add_xmp ($reference, $pdf_filename)
 			$command = "exiftool" .  " -XMP:PageRange+=" . escapeshellarg($reference->spage. '-' . $reference->epage) . " " . $pdf_filename;
 			system($command);
 		}
-		*/
 	}
 	
 	if (isset($reference->year))
