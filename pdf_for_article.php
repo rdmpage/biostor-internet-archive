@@ -14,7 +14,9 @@ $tmpdir = dirname(__FILE__) . '/tmp';
 $ids=array(205921); // has DOI
 $ids=array(206021);
 
-//$ids=array(206586);
+$ids=array(4010);
+
+$ids=array(136802);
 
 $force = false;
 $force = true;
@@ -157,7 +159,7 @@ foreach ($ids as $biostor)
 				}
 				if (isset($reference->publication_outlet))
 				{
-					$headers[] = '"x-archive-meta-journal:' . addcslashes($reference->publication_outlet, '"') . '"';
+					$headers[] = '"x-archive-meta-journaltitle:' . addcslashes($reference->publication_outlet, '"') . '"';
 				}
 				if (isset($reference->volume))
 				{
